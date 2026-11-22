@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Île-de-France — réseau traversant (simulation)</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      onerror="this.onerror=null;this.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'">
+<style>
+:root{
+  --bg:#0b0c0f; --panel:rgba(28,29,33,.72); --panel-solid:#1c1d21; --line:rgba(255,255,255,.08);
+  --text:#f5f5f7; --muted:#9a9aa1; --chip:rgba(255,255,255,.06); --chip-on:rgba(255,255,255,.14);
+  --accent:#0a84ff; --halo:#0b0c0f; --shadow:0 10px 40px rgba(0,0,0,.45);
+}
+body.light{
+  --bg:#f2f2f7; --panel:rgba(255,255,255,.75); --panel-solid:#fff; --line:rgba(0,0,0,.08);
+  --text:#1d1d1f; --muted:#6e6e73; --chip:rgba(0,0,0,.04); --chip-on:rgba(0,0,0,.09);
+  --accent:#007aff; --halo:#ffffff; --shadow:0 10px 40px rgba(0,0,0,.15);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+  font:14px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+#map{position:fixed;inset:0;background:var(--bg)}
+.leaflet-container{background:var(--bg);font:inherit}
+.dark-filter{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.5)}
+
+/* Panneau */
+#panel{position:fixed;top:max(14px,env(safe-area-inset-top));left:14px;bottom:14px;width:340px;z-index:1000;
+  display:flex;flex-direction:column;background:var(--panel);backdrop-filter:blur(24px) saturate(1.6);
+  -webkit-backdrop-filter:blur(24px) saturate(1.6);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden}
+#panel header{padding:16px 16px 10px}
+#panel h1{margin:0;font-size:19px;font-weight:700;letter-spacing:-.02em}
+#panel .sub{color:var(--muted);font-size:12.5px;margin-top:2px}
+.toolbar{display:flex;gap:6px;margin-top:12px}
+.seg{display:flex;background:var(--chip);border-radius:10px;padding:2px;flex:1}
+.seg button{flex:1;border:0;background:transparent;color:var(--text);font:inherit;font-size:12.5px;padding:6px 4px;border-radius:8px;cursor:pointer}
+.seg button.on{background:var(--chip-on);font-weight:600}
+select,input[type=search]{width:100%;border:0;border-radius:10px;background:var(--chip);color:var(--text);font:inherit;padding:8px 10px;outline:none}
+select option{background:var(--panel-solid);color:var(--text)}
+.row{display:flex;gap:6px;margin-top:8px}
+#list{overflow:auto;padding:4px 10px 14px;flex:1;-webkit-overflow-scrolling:touch}
+.group{margin-top:12px}
+.ghead{display:flex;align-items:center;justify-content:space-between;padding:4px 6px}
+.ghead .t{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.ghead .acts button{border:0;background:none;color:var(--accent);font:inherit;font-size:12.5px;cursor:pointer;padding:2px 4px}
+.chips{display:grid;grid-template-columns:minmax(0,1fr);gap:4px}
+.chip{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:12px;cursor:pointer;user-select:none;transition:background .15s, opacity .15s}
+.chip:hover{background:var(--chip)}
+.chip.on{background:var(--chip-on)}
+.chip:not(.on){opacity:.55}
+.badge{min-width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#fff;padding:0 6px;flex-shrink:0}
+.badge.circle{border-radius:50%;width:28px;padding:0}
+.badge.tram{border-radius:6px;font-size:12px}
+.chip .txt{flex:1;min-width:0}
+.chip .nm{font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip .ds{color:var(--muted);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip .tag{font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px;background:rgba(255,159,10,.2);color:#ff9f0a;margin-left:6px;vertical-align:1px}
+.chip .tag.approx{background:rgba(142,142,147,.22);color:var(--muted)}
+.chip .zoom{border:0;background:none;color:var(--muted);cursor:pointer;font-size:15px;padding:4px;border-radius:6px}
+.chip .zoom:hover{color:var(--text)}
+.chip.nodata .ds::after{content:" · en attente des données"}
+#status{padding:9px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center}
+#stxt{flex:1 1 calc(100% - 20px)}
+#status .dot{width:8px;height:8px;border-radius:50%;background:#ff9f0a;flex-shrink:0}
+#status.ok .dot{background:#30d158}
+#status.err .dot{background:#ff453a}
+#status button{border:0;background:var(--chip);color:var(--text);font:inherit;font-size:11.5px;border-radius:8px;padding:4px 8px;cursor:pointer}
+#handle{display:none}
+#save{margin-left:auto}
+#status button.pulse{background:var(--accent);color:#fff}
+
+/* Légende */
+#legend{position:fixed;right:14px;bottom:24px;z-index:900;background:var(--panel);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border:1px solid var(--line);border-radius:14px;padding:10px 12px;font-size:12px;color:var(--muted);box-shadow:var(--shadow)}
+#legend div{display:flex;align-items:center;gap:8px;margin:2px 0}
+#legend i{display:inline-block;width:26px;height:0;border-top:4px solid var(--text)}
+#legend i.dash{border-top:4px dotted #ff9f0a}
+#legend i.thin{border-top-width:2px}
+
+/* Leaflet habillage */
+.leaflet-popup-content-wrapper,.leaflet-tooltip{background:var(--panel-solid);color:var(--text);border-radius:12px;box-shadow:var(--shadow);border:1px solid var(--line)}
+.leaflet-popup-tip{background:var(--panel-solid)}
+.leaflet-tooltip{border-radius:8px;padding:4px 8px;font-size:12px}
+.leaflet-tooltip:before{display:none}
+.leaflet-control-zoom a{background:var(--panel-solid)!important;color:var(--text)!important;border-color:var(--line)!important}
+.leaflet-control-attribution{background:var(--panel)!important;color:var(--muted)!important;border-radius:8px 0 0 0;font-size:10px}
+.leaflet-control-attribution a{color:var(--muted)!important}
+.pop h3{margin:0 0 4px;font-size:15px}
+.pop p{margin:2px 0;color:var(--muted);font-size:12.5px}
+
+@media (max-width:720px){
+  #panel{top:auto;left:0;right:0;bottom:0;width:auto;height:52vh;border-radius:20px 20px 0 0;transition:height .25s ease;
+    padding-bottom:env(safe-area-inset-bottom)}
+  #panel.collapsed{height:118px}
+  #handle{display:block;flex-shrink:0;width:38px;height:5px;box-sizing:content-box;padding:8px 30px;border-radius:3px;background:var(--muted);background-clip:content-box;opacity:.5;margin:0 auto;cursor:pointer}
+  #panel header{padding-top:6px}
+  #legend{top:max(10px,env(safe-area-inset-top));bottom:auto;left:10px;right:auto;font-size:10.5px;padding:7px 9px}
+  #legend i{width:18px}
+  .leaflet-top.leaflet-right{top:max(0px,env(safe-area-inset-top))}
+}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<aside id="panel">
+  <div id="handle" title="Afficher / masquer"></div>
+  <header>
+    <h1>Réseau francilien traversant</h1>
+    <div class="sub">Simulation · tracés réels OpenStreetMap · A1, E1, G, H, J1, L1 retravaillées</div>
+    <div class="toolbar">
+      <div class="seg" id="theme"><button data-v="dark" class="on">Sombre</button><button data-v="light">Clair</button></div>
+    </div>
+    <div class="row">
+      <select id="basemap" aria-label="Fond de carte">
+        <option value="auto">Fond : automatique (suit le thème)</option>
+        <option value="esri-dark">Gris foncé épuré</option>
+        <option value="esri-light">Gris clair épuré</option>
+        <option value="esri-street-dark">Plan détaillé (sombre)</option>
+        <option value="esri-street">Plan détaillé (couleur)</option>
+        <option value="esri-sat">Satellite</option>
+        <option value="osm">OpenStreetMap (serveur http requis)</option>
+      </select>
+    </div>
+    <div class="row"><input type="search" id="q" placeholder="Filtrer les lignes (ex. 15, T3, RER)…"></div>
+  </header>
+  <div id="list"></div>
+  <div id="status"><span class="dot"></span><span id="stxt">Préparation…</span><button id="save" title="Enregistrer les données dans donnees_idf.js (à mettre à côté de la carte)">Enregistrer</button><button id="open" title="Charger un fichier donnees_idf.js">Charger</button><button id="reload" title="Retélécharger depuis OpenStreetMap">↻</button><input type="file" id="file" accept=".js,.json" hidden></div>
+</aside>
+
+<div id="legend">
+  <div><i></i>Ligne exploitée (tracé OSM)</div>
+  <div><i class="dash"></i>Tunnel à creuser (scénario)</div>
+  <div><i class="thin" style="border-top-style:dashed"></i>Tracé approx. (pas dans OSM)</div>
+</div>
+
+<!-- Données locales : si donnees_idf.js est dans le même dossier, aucun téléchargement -->
+<script src="donnees_idf.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+if(!window.L){document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"><\/script>')}
+</script>
+<script>
+(function(){
+'use strict';
+if(!window.L){document.getElementById('stxt').textContent='Leaflet n’a pas pu être chargé (connexion ?).';return;}
+
+/* ------------------------------------------------------------------ */
+/*  1. Catalogue des lignes                                            */
+/* ------------------------------------------------------------------ */
+const GROUPS=[
+  {id:'rer',  title:'RER (scénario)'},
+  {id:'tlnew',title:'Transilien retravaillé (avant fusion)'},
+  {id:'tl',   title:'Transilien conservé'},
+  {id:'gpe',  title:'Grand Paris Express'},
+  {id:'metro',title:'Métro'},
+  {id:'tram', title:'Tramway'},
+  {id:'act',  title:'Réseau actuel (pour comparer)'}
+];
+const L_=[];
+function add(o){L_.push(o)}
+// Sources réutilisées
+// Sources (filtrage par relation OSM : nom + gares desservies ; west/east = garder les voies entièrement à l'ouest/est d'une longitude)
+// Critères de branche : nom/gares de la relation OSM OU passage géographique près d'une gare (plus fiable si les gares ne sont pas nommées)
+const VIA_POISSY={re:/Poissy/,near:[[48.9330,2.0446,900]]};
+const VIA_CERGY_NANTERRE_U={re:/Cergy|Maisons-Laffitte|Nanterre[- ]Universit/,near:[[49.0485,2.0105,1200],[48.9013,2.2142,500]]};
+const J_POISSY_OUEST={k:'TL:J',only:VIA_POISSY,west:2.195};         // Houilles → Poissy → Mantes
+const J_POISSY_PARIS={k:'TL:J',only:VIA_POISSY,east:2.245};         // St-Lazare → La Garenne-Colombes (direct La Garenne → Houilles supprimé)
+const L_VIA_NANTERRE_U={k:'TL:L',only:VIA_CERGY_NANTERRE_U,east:2.18}; // St-Lazare → La Garenne → Nanterre-Université → Houilles (pas Cergy : doublon du A)
+const J_SANS_POISSY={k:'TL:J',not:VIA_POISSY};                      // J1 : Gisors · Ermont · Mantes via Conflans-Ste-Honorine
+const L_SANS_CERGY={k:'TL:L',not:VIA_CERGY_NANTERRE_U};             // L1 : Versailles RD · St-Nom
+const EXT_E={label:'Prolongement EOLE vers Mantes-la-Jolie (ouverture commerciale prévue fin février 2027)',westOf:1.80,pts:[
+    ['Nanterre-La Folie',48.8953,2.2150],['Nanterre-Université',48.9013,2.2142],[null,48.9150,2.2010],['Houilles-Carrières-sur-Seine',48.9258,2.1897],
+    [null,48.9385,2.1580],[null,48.9466,2.1456],[null,48.9552,2.0919],[null,48.9445,2.0640],['Poissy',48.9330,2.0446],
+    ['Villennes-sur-Seine',48.9396,1.9998],['Vernouillet-Verneuil',48.9746,1.9836],['Les Clairières de Verneuil',48.9850,1.9640],
+    ['Les Mureaux',48.9922,1.9134],['Aubergenville-Élisabethville',48.9725,1.8700],['Épône-Mézières',48.9605,1.8131],
+    [null,48.9760,1.7600],['Mantes-Station',48.9875,1.7240],['Mantes-la-Jolie',48.9897,1.7033]]};
+
+// ---- RER du scénario ----
+add({id:'A1',group:'rer',badge:'A1',color:'#E3051C',name:'RER A1',isNew:true,desc:'Cergy · St-Germain ⇄ Marne-la-Vallée · Boissy — sans Poissy (repris par E1)',src:[{k:'RER:A',not:VIA_POISSY}]});
+add({id:'B',group:'rer',badge:'B',color:'#5291CE',name:'RER B',desc:'CDG · Mitry ⇄ St-Rémy · Robinson',src:['RER:B']});
+add({id:'C',group:'rer',badge:'C',color:'#FFCE00',fg:'#1d1d1f',name:'RER C',desc:'Pontoise · Versailles ⇄ Massy · Étampes · Dourdan',src:['RER:C']});
+add({id:'D',group:'rer',badge:'D',color:'#00814F',name:'RER D',desc:'Creil ⇄ Melun · Corbeil · Malesherbes',src:['RER:D']});
+add({id:'E1',group:'rer',badge:'E1',color:'#C04191',name:'RER E1',isNew:true,
+  desc:'Bifurcation à Haussmann : via La Défense (Nanterre-La Folie) / via La Garenne-Colombes · Nanterre-U → Houilles → Poissy → Mantes ⇄ Chelles · Tournan + ex-P',
+  src:['RER:E','TL:P',L_VIA_NANTERRE_U,J_POISSY_PARIS,J_POISSY_OUEST],ext:EXT_E,
+  tunnelLabel:'Raccordement creusé Haussmann-Saint-Lazare → Pont-Cardinet (bifurcation du E1)',
+  tunnel:[[48.8752,2.3268],[48.8790,2.3235],[48.8830,2.3195],[48.8868,2.3150]],
+  tstations:[['Haussmann-Saint-Lazare (bifurcation)',48.8752,2.3268],['Raccordement Pont-Cardinet (fictif)',48.8868,2.3150]]});
+add({id:'G',group:'rer',badge:'G',color:'#A0662F',name:'RER G',isNew:true,desc:'ex-N ⇄ ex-H + K (sans Pontoise : Liesse → Épluches direct) · tunnel creusé Montparnasse → Châtelet → Gare du Nord',
+  src:['TL:N',{k:'TL:H',drop:[[49.030,49.0545,1.9,2.1265]]},'TL:K'],
+  links:[{a:['Saint-Ouen-l’Aumône-Liesse',49.0340,2.1282],b:['Épluches',49.0547,2.1224],bend:.0015,
+    label:'Raccord direct Saint-Ouen-l’Aumône-Liesse → Épluches (voie historique Pierrelaye – Creil, tracé approximatif)'}],
+  tunnelLabel:'Tunnel creusé Montparnasse → Châtelet → Gare du Nord (rampes dans les faisceaux des gares)',
+  tunnel:[[48.8410,2.3210],[48.8465,2.3295],[48.8525,2.3385],[48.8590,2.3470],[48.8700,2.3520],[48.8809,2.3553]],
+  tstations:[['Montparnasse (quais souterrains G)',48.8410,2.3210],['Châtelet (gare commune G / H)',48.8590,2.3470],['Gare du Nord (quais souterrains G)',48.8809,2.3553]]});
+add({id:'H',group:'rer',badge:'H',color:'#00A3A6',name:'RER H',isNew:true,desc:'J1 (Gisors · Ermont · Mantes via Conflans) + L1 (Versailles RD · St-Nom) ⇄ ex-R · tunnel creusé St-Lazare → Châtelet → Gare de Lyon',src:[J_SANS_POISSY,L_SANS_CERGY,'TL:R'],
+  tunnelLabel:'Tunnel creusé Saint-Lazare → Châtelet → Gare de Lyon (rampes dans les faisceaux des gares)',
+  tunnel:[[48.8763,2.3253],[48.8705,2.3335],[48.8645,2.3405],[48.8590,2.3470],[48.8530,2.3575],[48.8480,2.3665],[48.8443,2.3735]],
+  tstations:[['Saint-Lazare (rampe dans le faisceau)',48.8763,2.3253],['Châtelet (gare commune G / H)',48.8590,2.3470],['Gare de Lyon (quais souterrains H)',48.8443,2.3735]]});
+// ---- Transilien retravaillé : ce qui reste une fois les branches parties dans E1 ----
+add({id:'J1',group:'tlnew',badge:'J1',color:'#CEC73D',fg:'#1d1d1f',name:'Transilien J1',isNew:true,desc:'St-Lazare ⇄ Gisors · Ermont · Mantes via Conflans-Ste-Honorine (→ RER H)',src:[J_SANS_POISSY]});
+add({id:'L1',group:'tlnew',badge:'L1',color:'#C4A4CC',fg:'#1d1d1f',name:'Transilien L1',isNew:true,desc:'St-Lazare ⇄ Versailles RD · St-Nom-la-Bretèche (→ RER H)',src:[L_SANS_CERGY]});
+// ---- Transilien conservés ----
+add({id:'U',group:'tl',badge:'U',color:'#D3006A',name:'Ligne U',desc:'La Défense ⇄ La Verrière',src:['TL:U']});
+add({id:'V',group:'tl',badge:'V',color:'#9F9825',name:'Ligne V',desc:'Massy-Palaiseau ⇄ Versailles-Chantiers',src:['TL:V']});
+// GPE
+add({id:'15',group:'gpe',badge:'15',color:'#B90845',name:'Ligne 15',desc:'Rocade : Pont de Sèvres · Pleyel · Champigny · Noisy-Champs',src:['M:15'],fb:'15'});
+add({id:'16',group:'gpe',badge:'16',color:'#F3A4BA',fg:'#1d1d1f',name:'Ligne 16',desc:'Saint-Denis Pleyel ⇄ Noisy-Champs',src:['M:16'],fb:'16'});
+add({id:'17',group:'gpe',badge:'17',color:'#D5C900',fg:'#1d1d1f',name:'Ligne 17',desc:'Saint-Denis Pleyel ⇄ Le Mesnil-Amelot',src:['M:17'],fb:'17'});
+add({id:'18',group:'gpe',badge:'18',color:'#00A88F',name:'Ligne 18',desc:'Nanterre La Folie ⇄ Versailles ⇄ Saclay ⇄ Orly ⇄ Boissy-Saint-Léger (tracé complet fourni)',src:['M:18'],fb:'18'});
+// Métro
+const MCOL={'1':'#FFCD00','2':'#003CA6','3':'#837902','3bis':'#6EC4E8','4':'#CF009E','5':'#FF7E2E','6':'#6ECA97','7':'#FA9ABA',
+  '7bis':'#6ECA97','8':'#E19BDF','9':'#B6BD00','10':'#C9910D','11':'#704B1C','12':'#007852','13':'#6EC4E8','14':'#62259D'};
+const MDARK={'1':1,'3bis':1,'5':1,'6':1,'7':1,'7bis':1,'8':1,'9':1,'10':1,'13':1};
+for(const r of Object.keys(MCOL)){
+  add({id:'M'+r,group:'metro',badge:r.replace('bis','b'),circle:true,color:MCOL[r],fg:MDARK[r]?'#1d1d1f':'#fff',name:'Métro '+r,desc:'',src:['M:'+r]});
+}
+// Tram
+const TCOL={t1:'#003CA6',t2:'#CF009E',t3a:'#FF7E2E',t3b:'#00814F',t4:'#E19BDF',t5:'#683C11',t6:'#E3051C',t7:'#704B1C',
+  t8:'#837902',t9:'#4E9DD5',t10:'#6ECA97',t11:'#FF5A00',t12:'#A50034',t13:'#8D5E2A'};
+for(const t of Object.keys(TCOL)){
+  add({id:t.toUpperCase(),group:'tram',badge:'T'+t.slice(1),tram:true,color:TCOL[t],name:'Tram T'+t.slice(1),desc:'',src:['T:'+t]});
+}
+// ---- Réseau actuel (comparaison) ----
+add({id:'A',group:'act',badge:'A',color:'#E3051C',name:'RER A (actuel)',desc:'Cergy · Poissy · St-Germain ⇄ Marne-la-Vallée · Boissy',src:['RER:A']});
+add({id:'E',group:'act',badge:'E',color:'#C04191',name:'RER E (actuel)',desc:'Mantes ⇄ Chelles · Tournan (EOLE)',src:['RER:E',J_POISSY_OUEST,{k:'TL:L',only:VIA_CERGY_NANTERRE_U,west:2.215,east:2.185}],ext:EXT_E});
+const TLA={H:['#8D5E2A','Paris-Nord ⇄ Pontoise · Persan · Luzarches · Creil'],J:['#CEC73D','St-Lazare ⇄ Mantes · Gisors · Ermont'],
+  K:['#9B9842','Paris-Nord ⇄ Crépy-en-Valois'],L:['#C4A4CC','St-Lazare ⇄ Versailles RD · St-Nom · Cergy'],
+  N:['#00A092','Montparnasse ⇄ Rambouillet · Dreux · Mantes'],P:['#F28E42','Paris-Est ⇄ Meaux · Château-Thierry · Provins · Coulommiers'],
+  R:['#E4B4D1','Gare de Lyon ⇄ Melun · Montereau · Montargis']};
+for(const k of Object.keys(TLA))
+  add({id:'TL'+k,group:'act',badge:k,color:TLA[k][0],fg:'#1d1d1f',name:'Transilien '+k+' (actuel)',desc:TLA[k][1],src:['TL:'+k]});
+const DEFAULT_ON=new Set(['A1','B','C','D','E1','G','H','U','V','15','16','17','18']);
+
+/* ------------------------------------------------------------------ */
+/*  2. Tracés de secours GPE (gares, coordonnées approchées)           */
+/* ------------------------------------------------------------------ */
+const FB={
+ '15':[[['Pont de Sèvres',48.8296,2.2306],['Issy RER',48.8243,2.2632],['Fort d’Issy-Vanves-Clamart',48.8173,2.2823],['Châtillon-Montrouge',48.8105,2.3012],
+   ['Bagneux',48.8034,2.3176],['Arcueil-Cachan',48.7976,2.3283],['Villejuif IGR',48.7955,2.3482],['Villejuif Louis Aragon',48.7877,2.3677],['Vitry Centre',48.7912,2.3895],
+   ['Les Ardoines',48.7842,2.4097],['Le Vert de Maisons',48.7896,2.4335],['Créteil L’Échat',48.7963,2.4495],['Saint-Maur-Créteil',48.8066,2.4732],
+   ['Champigny Centre',48.8157,2.5167],['Bry-Villiers-Champigny',48.8280,2.5410],['Noisy-Champs',48.8433,2.5800]],
+  [['Pont de Sèvres',48.8296,2.2306],['Saint-Cloud',48.8441,2.2178],['Rueil-Suresnes Mont-Valérien',48.8654,2.2140],['Nanterre La Boule',48.8832,2.2072],
+   ['Nanterre La Folie',48.8953,2.2150],['La Défense',48.8919,2.2380],['Bécon-les-Bruyères',48.9055,2.2680],['Bois-Colombes',48.9150,2.2687],
+   ['Les Agnettes',48.9217,2.2865],['Les Grésillons',48.9284,2.3036],['Saint-Denis Pleyel',48.9187,2.3462]],
+  [['Saint-Denis Pleyel',48.9187,2.3462],['Stade de France',48.9186,2.3606],['Mairie d’Aubervilliers',48.9136,2.3818],['Fort d’Aubervilliers',48.9147,2.4041],
+   ['Drancy-Bobigny',48.9100,2.4300],['Bobigny Pablo Picasso',48.9065,2.4492],['Pont de Bondy',48.8932,2.4689],['Bondy',48.8946,2.4825],
+   ['Rosny-Bois-Perrier',48.8830,2.4833],['Val de Fontenay',48.8533,2.4882],['Nogent-Le Perreux',48.8381,2.4940],['Champigny Centre',48.8157,2.5167]]],
+ '16':[[['Saint-Denis Pleyel',48.9187,2.3462],['La Courneuve Six Routes',48.9265,2.3964],['Le Bourget RER',48.9311,2.4261],['Le Blanc-Mesnil',48.9377,2.4618],
+   ['Aulnay',48.9312,2.4960],['Sevran-Beaudottes',48.9418,2.5244],['Sevran-Livry',48.9343,2.5373],['Clichy-Montfermeil',48.9036,2.5531],
+   ['Chelles',48.8796,2.5916],['Noisy-Champs',48.8433,2.5800]]],
+ '17':[[['Saint-Denis Pleyel',48.9187,2.3462],['La Courneuve Six Routes',48.9265,2.3964],['Le Bourget RER',48.9311,2.4261],['Le Bourget Aéroport',48.9550,2.4380],
+   ['Triangle de Gonesse',48.9770,2.4750],['Parc des Expositions',48.9732,2.5150],['Aéroport CDG T2',49.0040,2.5710],['Aéroport CDG T4',49.0130,2.5430],
+   ['Le Mesnil-Amelot',49.0160,2.5950]]],
+ '18':[[['Nanterre La Folie',48.8954,2.218],['Rueil Centre',48.8796,2.1779],['La Celle-Saint-Cloud',48.8419,2.1333],[null,48.8297,2.1163],['Le Chesnay-Rocquencourt',48.8267,2.1155],['Versailles-Rive-Droite',48.8098,2.1321],[null,48.8005,2.1436],[null,48.7981,2.1445],['Versailles-Chantiers',48.7952,2.1347],[null,48.7913,2.1227],['Satory',48.7884,2.1025],[null,48.7856,2.0955],[null,48.781,2.0941],[null,48.7752,2.0863],[null,48.7694,2.0813],[null,48.7648,2.0745],['Guyancourt',48.7625,2.0729],[null,48.7555,2.0709],[null,48.7508,2.0737],[null,48.7473,2.083],[null,48.7437,2.0958],[null,48.7379,2.1034],[null,48.7344,2.1108],[null,48.7307,2.1344],[null,48.7307,2.1452],[null,48.7325,2.1576],['Christ de Saclay',48.7315,2.1638],[null,48.7224,2.1691],[null,48.7154,2.1714],['Université Paris-Saclay',48.7135,2.1762],[null,48.7176,2.1856],['Polytechnique',48.7166,2.2033],[null,48.7198,2.207],['Camille Claudel',48.7202,2.2224],[null,48.722,2.2373],[null,48.7208,2.2481],['Massy-Palaiseau',48.7251,2.2607],[null,48.7307,2.2671],[null,48.7304,2.2761],['Massy Opéra',48.7315,2.2922],[null,48.7337,2.3028],['Antonypole - Wissous Centre',48.7351,2.3106],[null,48.7366,2.3187],[null,48.733,2.3405],[null,48.7357,2.3547],[null,48.7322,2.3614],['Aéroport d’Orly',48.7271,2.3636],[null,48.7166,2.3597],[null,48.7096,2.362],['Paray-Vieille-Poste',48.7042,2.3742],[null,48.7049,2.3821],[null,48.7106,2.3996],['Athis-Mons',48.7115,2.406],['Vigneux-sur-Seine',48.7072,2.4174],[null,48.7023,2.4325],['Vigneux - Montgeron Glacière',48.7006,2.4434],[null,48.701,2.4577],['Montgeron - Crosne',48.7063,2.4652],['Crosne',48.7195,2.4725],[null,48.7311,2.4752],[null,48.7369,2.4737],['La Végétale - Valenton',48.739,2.4811],['Limeil-Brévannes',48.7427,2.4894],[null,48.7461,2.501],['Boissy-Saint-Léger',48.75,2.5053]]]
+};
+function catmull(pts,n){ // pts [[lat,lng],..] -> courbe lissée
+  if(pts.length<3)return pts;
+  const out=[],q=[pts[0],...pts,pts[pts.length-1]];
+  for(let i=1;i<q.length-2;i++){
+    const [p0,p1,p2,p3]=[q[i-1],q[i],q[i+1],q[i+2]];
+    for(let s=0;s<n;s++){const t=s/n,t2=t*t,t3=t2*t;
+      out.push([0,1].map(k=>.5*((2*p1[k])+(-p0[k]+p2[k])*t+(2*p0[k]-5*p1[k]+4*p2[k]-p3[k])*t2+(-p0[k]+3*p1[k]-3*p2[k]+p3[k])*t3)));}
+  }
+  out.push(pts[pts.length-1]);return out;
+}
+
+/* ------------------------------------------------------------------ */
+/*  3. Carte et fonds                                                  */
+/* ------------------------------------------------------------------ */
+const canvas=L.canvas({padding:.5,tolerance:6});
+const map=L.map('map',{zoomControl:false,preferCanvas:true,renderer:canvas,attributionControl:true,zoomSnap:.25})
+  .fitBounds([[48.55,1.75],[49.15,3.0]]);
+L.control.zoom({position:'topright'}).addTo(map);
+window.idfMap=map; // accès console
+const OSMA='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+const ESRI='https://server.arcgisonline.com/ArcGIS/rest/services/';
+const EA='Tuiles &copy; Esri, HERE, Garmin, '+OSMA;
+function esri(path,o){return L.tileLayer(ESRI+path+'/MapServer/tile/{z}/{y}/{x}',Object.assign({maxZoom:19,maxNativeZoom:16,attribution:EA},o||{}))}
+// Chaque fond = [couche de base, couche d'étiquettes éventuelle]. Uniquement des fonds sans clé ni Referer.
+const BASE={
+  'esri-dark':()=>[esri('Canvas/World_Dark_Gray_Base'),esri('Canvas/World_Dark_Gray_Reference',{pane:'labels'})],
+  'esri-light':()=>[esri('Canvas/World_Light_Gray_Base'),esri('Canvas/World_Light_Gray_Reference',{pane:'labels'})],
+  'esri-street-dark':()=>[esri('World_Street_Map',{maxNativeZoom:19,className:'dark-filter'})],
+  'esri-street':()=>[esri('World_Street_Map',{maxNativeZoom:19})],
+  'esri-sat':()=>[esri('World_Imagery',{maxNativeZoom:19}),esri('Reference/World_Boundaries_and_Places',{pane:'labels'})],
+  'osm':()=>[L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:OSMA})]
+};
+map.createPane('labels');map.getPane('labels').style.zIndex=350;map.getPane('labels').style.pointerEvents='none';
+let baseLayers=[],tileErrs=0;
+function setBase(key){
+  baseLayers.forEach(l=>map.removeLayer(l));tileErrs=0;
+  baseLayers=BASE[key]().map(l=>l.addTo(map));
+  baseLayers[0].on('tileerror',()=>{ // fond refusé -> bascule sur Esri
+    if(++tileErrs===6&&!key.startsWith('esri-dark')&&!key.startsWith('esri-light')){
+      status('Fond « '+key+' » refusé par le serveur : retour à Esri.','err');
+      sel.value='auto';setBase(theme==='dark'?'esri-dark':'esri-light');
+    }
+  });
+}
+const sel=document.getElementById('basemap');
+let theme='dark';
+function store(k,v){try{localStorage.setItem('idfmap.'+k,v)}catch(e){}}
+function load(k){try{return localStorage.getItem('idfmap.'+k)}catch(e){return null}}
+function applyBase(){const v=sel.value;setBase(v==='auto'?(theme==='dark'?'esri-dark':'esri-light'):v)}
+function setTheme(t){
+  theme=t;document.body.classList.toggle('light',t==='light');
+  document.querySelectorAll('#theme button').forEach(b=>b.classList.toggle('on',b.dataset.v===t));
+  store('theme',t);applyBase();restyleAll();
+}
+sel.onchange=()=>{store('base',sel.value);applyBase()};
+document.querySelectorAll('#theme button').forEach(b=>b.onclick=()=>setTheme(b.dataset.v));
+
+/* ------------------------------------------------------------------ */
+/*  4. Couches par ligne + rendu côte à côte des tronçons partagés      */
+/* ------------------------------------------------------------------ */
+const W={rer:5,tl:4,tlnew:4,gpe:5,metro:3.2,tram:3,act:3.5};
+map.createPane('halos');map.getPane('halos').style.zIndex=395;
+const haloCanvas=L.canvas({pane:'halos',padding:.5});
+const state={};
+for(const l of L_)state[l.id]={on:false,group:L.layerGroup(),stations:L.layerGroup(),loaded:false,approx:false,info:null};
+window.idfState=state;
+function haloColor(){return getComputedStyle(document.body).getPropertyValue('--halo').trim()||'#000'}
+function popupHtml(l,extra){return `<div class="pop"><h3>${l.name}</h3><p>${l.desc||''}</p>${extra?`<p>${extra}</p>`:''}</div>`}
+
+// Décale une polyligne projetée de d pixels, perpendiculairement (joints en onglet bornés)
+function offsetRing(pts,d){
+  const n=pts.length;if(n<2||!d)return pts;
+  const nx=[],ny=[];
+  for(let i=0;i<n-1;i++){const dx=pts[i+1].x-pts[i].x,dy=pts[i+1].y-pts[i].y,len=Math.hypot(dx,dy);
+    if(len<1e-6){nx.push(null);ny.push(null)}else{nx.push(-dy/len);ny.push(dx/len)}}
+  let k=null;for(let i=0;i<nx.length;i++){if(nx[i]===null){if(k!==null){nx[i]=nx[k];ny[i]=ny[k]}}else k=i}
+  k=null;for(let i=nx.length-1;i>=0;i--){if(nx[i]===null){if(k!==null){nx[i]=nx[k];ny[i]=ny[k]}}else k=i}
+  if(nx[0]===null)return pts;
+  const out=new Array(n);
+  for(let i=0;i<n;i++){
+    let ax,ay;
+    if(i===0){ax=nx[0];ay=ny[0]}else if(i===n-1){ax=nx[n-2];ay=ny[n-2]}
+    else{ax=nx[i-1]+nx[i];ay=ny[i-1]+ny[i];const m=Math.hypot(ax,ay);
+      if(m<1e-6){ax=nx[i];ay=ny[i]}else{ax/=m;ay/=m;const c=ax*nx[i]+ay*ny[i],f=1/Math.max(c,.5);ax*=f;ay*=f}}
+    out[i]=L.point(pts[i].x+ax*d,pts[i].y+ay*d);
+  }
+  return out;
+}
+const OffsetLine=L.Polyline.extend({
+  _projectLatlngs(latlngs,result,projectedBounds){
+    const flat=latlngs[0] instanceof L.LatLng;
+    L.Polyline.prototype._projectLatlngs.call(this,latlngs,result,projectedBounds);
+    if(flat&&this.options.offset&&result.length)result[result.length-1]=offsetRing(result[result.length-1],this.options.offset);
+  }
+});
+
+function nearestVertex(ids,lat,lon){
+  let best=null,bd=Infinity;
+  for(const id of ids){const g=wayLL(id);if(!g)continue;
+    for(const p of g){const d=(p[0]-lat)**2+((p[1]-lon)*.66)**2;if(d<bd){bd=d;best=p}}}
+  return best;
+}
+function lengthKm(lines){let t=0;for(const ln of lines)for(let i=1;i<ln.length;i++)t+=map.distance(ln[i-1],ln[i]);return t/1000}
+function stationLayer(l,list){
+  const g=L.layerGroup();
+  for(const st of list)L.circleMarker([st[1],st[2]],{radius:3.2,color:l.color,weight:2,fillColor:'#f5f5f7',fillOpacity:1,renderer:canvas})
+    .bindTooltip(st[0],{direction:'top',offset:[0,-4]}).addTo(g);
+  return g;
+}
+// Prépare (une fois par jeu de données) : voies OSM retenues, tracés approchés, gares, emprise
+function prepare(l){
+  const s=state[l.id];
+  const c=DATA?collect(l):{ways:[],stations:[]};
+  const info={ways:c.ways,stations:c.stations,approx:[]};
+  if(l.fb){ // GPE : OSM si complet, sinon gares reliées
+    const fbl=FB[l.fb].map(br=>catmull(br.map(x=>[x[1],x[2]]),br.length>30?4:10));
+    if(!info.ways.length||lengthKm(info.ways.map(wayLL))<0.6*lengthKm(fbl)){
+      const seen=new Set(),st=[];for(const br of FB[l.fb])for(const x of br)if(x[0]&&!seen.has(x[0])){seen.add(x[0]);st.push(x)}
+      info.ways=[];info.stations=st;info.approx.push({lines:fbl,label:'Tracé approximatif (gares reliées) — absent des données OSM.'});
+    }
+  }
+  if(l.ext){ // RER E : Nanterre → Houilles → Poissy → Mantes
+    const reach=(ids,x)=>ids.some(id=>{const g=wayLL(id);return g&&g.some(p=>p[1]<x)});
+    const eOwn=DATA?collect({src:['RER:E']}).ways:[];
+    const pts=l.ext.pts;
+    if(!reach(info.ways,1.80)){                                         // rien à l'ouest : tout en approché
+      info.approx.push({lines:[catmull(pts.map(p=>[p[1],p[2]]),8)],label:l.ext.label+'<br>Tracé approximatif (gares reliées).'});
+      const have=new Set(info.stations.map(x=>x[0]));for(const p of pts)if(p[0]&&!have.has(p[0]))info.stations.push(p);
+    }else if(eOwn.length&&!reach(eOwn,2.212)){
+      // Raccord EOLE : bout réel du RER E dans OSM (près de La Folie) → voie réelle la plus proche de Nanterre-Université
+      const others=info.ways.filter(id=>!eOwn.includes(id));
+      const a=nearestVertex(eOwn,48.8953,2.2150),b=nearestVertex(others,48.9013,2.2142);
+      if(a&&b&&map.distance(a,b)<3000){
+        const mid=[(a[0]+b[0])/2+.0006,(a[1]+b[1])/2-.0006];
+        info.approx.push({lines:[catmull([a,mid,b],10)],label:'Raccord Nanterre-La Folie → Nanterre-Université (tracé approximatif)'});
+      }
+    }
+  }
+  for(const lk of (l.links||[])){ // raccord : du point de voie réel le plus proche de A à celui de B
+    let a=nearestVertex(info.ways,lk.a[1],lk.a[2]),b=nearestVertex(info.ways,lk.b[1],lk.b[2]);
+    if(!a||map.distance(a,[lk.a[1],lk.a[2]])>1500)a=[lk.a[1],lk.a[2]];
+    if(!b||map.distance(b,[lk.b[1],lk.b[2]])>1500)b=[lk.b[1],lk.b[2]];
+    const mid=[(a[0]+b[0])/2,(a[1]+b[1])/2+(lk.bend||0)];
+    info.approx.push({lines:[catmull([a,mid,b],10)],label:lk.label});
+    const have=new Set(info.stations.map(x=>x[0]));
+    for(const st of [lk.a,lk.b])if(![...have].some(n=>n.replace(/[-' ]/g,'').toLowerCase().includes(st[0].replace(/[-' ]/g,'').toLowerCase().slice(0,14))))info.stations.push(st);
+  }
+  let bounds=null;const ext=b=>{bounds=bounds?bounds.extend(b):b};
+  for(const id of info.ways){const g=wayLL(id);if(g)ext(L.latLngBounds(g))}
+  for(const a of info.approx)for(const ln of a.lines)ext(L.latLngBounds(ln));
+  if(l.tunnel)ext(L.latLngBounds(l.tunnel));
+  s.info=info;s.bounds=bounds;
+  s.loaded=info.ways.length>0||info.approx.length>0||!!l.tunnel;s.approx=info.approx.length>0;
+  const was=map.hasLayer(s.stations);if(was)map.removeLayer(s.stations);
+  s.stations=stationLayer(l,info.stations);
+  refreshChip(l);syncStations(l);
+}
+function prepareAll(){for(const l of L_)prepare(l);scheduleRender()}
+
+let renderQueued=false;
+function scheduleRender(){if(renderQueued)return;renderQueued=true;requestAnimationFrame(()=>{renderQueued=false;renderAll()})}
+function renderAll(){
+  const halo=haloColor();
+  const vis=L_.filter(l=>state[l.id].on&&state[l.id].info);
+  const share=new Map(); // voie OSM -> lignes visibles qui l'empruntent (ordre du catalogue)
+  for(const l of vis)for(const id of state[l.id].info.ways){let a=share.get(id);if(!a)share.set(id,a=[]);a.push(l)}
+  for(const l of L_){state[l.id].group.clearLayers();if(state[l.id].on&&state[l.id].info)draw(l,share,halo)}
+}
+function draw(l,share,halo){
+  const s=state[l.id],info=s.info,w=W[l.group];
+  const byOff=new Map();
+  for(const id of info.ways){
+    const g=wayLL(id);if(!g)continue;
+    const arr=share.get(id);let off=0;
+    if(arr&&arr.length>1){const sp=Math.max(...arr.map(x=>W[x.group]))+1;off=Math.round((arr.indexOf(l)-(arr.length-1)/2)*sp*10)/10}
+    let b=byOff.get(off);if(!b)byOff.set(off,b=[]);b.push(g);
+  }
+  for(const [off,lines] of byOff){
+    new OffsetLine(lines,{offset:off,color:halo,weight:w+3,opacity:.85,renderer:haloCanvas,interactive:false}).addTo(s.group);
+    new OffsetLine(lines,{offset:off,color:l.color,weight:w,opacity:.95,lineCap:'round',lineJoin:'round',renderer:canvas})
+      .bindPopup(popupHtml(l,'Tracé : OpenStreetMap'+(off?' · tronçon partagé, affiché côte à côte':''))).addTo(s.group);
+  }
+  for(const a of info.approx){
+    L.polyline(a.lines,{color:halo,weight:w+3,opacity:.85,renderer:haloCanvas,interactive:false}).addTo(s.group);
+    L.polyline(a.lines,{color:l.color,weight:w-1,dashArray:'6 7',lineCap:'round',renderer:canvas}).bindPopup(popupHtml(l,a.label)).addTo(s.group);
+  }
+  if(l.tunnel){
+    const t=catmull(l.tunnel,8);
+    L.polyline(t,{color:halo,weight:w+4,opacity:.9,renderer:haloCanvas,interactive:false}).addTo(s.group);
+    L.polyline(t,{color:l.color,weight:w+1,dashArray:'1 9',lineCap:'round',renderer:canvas}).bindPopup(popupHtml(l,(l.tunnelLabel||'Nouveau tunnel')+' · ≈ '+lengthKm([l.tunnel]).toFixed(1)+' km')).addTo(s.group);
+    for(const [n,a,b] of l.tstations)
+      L.circleMarker([a,b],{radius:5.5,color:l.color,weight:3,fillColor:'#fff',fillOpacity:1,renderer:canvas})
+        .bindTooltip(n,{direction:'top',offset:[0,-6]}).addTo(s.group);
+  }
+}
+function restyleAll(){scheduleRender()}
+function minZoomFor(g){return g==='metro'||g==='tram'?13:11}
+function syncStations(l){
+  const s=state[l.id];const want=s.on&&map.getZoom()>=minZoomFor(l.group);
+  if(want&&!map.hasLayer(s.stations))s.stations.addTo(map);
+  if(!want&&map.hasLayer(s.stations))map.removeLayer(s.stations);
+}
+map.on('zoomend',()=>L_.forEach(syncStations));
+function setOn(l,on){
+  const s=state[l.id];if(s.on===on)return;s.on=on;
+  if(on)s.group.addTo(map);else map.removeLayer(s.group);
+  syncStations(l);refreshChip(l);saveSel();scheduleRender();
+}
+function saveSel(){store('sel2',JSON.stringify(L_.filter(l=>state[l.id].on).map(l=>l.id)))}
+
+/* ------------------------------------------------------------------ */
+/*  5. Panneau                                                         */
+/* ------------------------------------------------------------------ */
+const list=document.getElementById('list');const chips={};
+for(const g of GROUPS){
+  const ls=L_.filter(l=>l.group===g.id);
+  const sec=document.createElement('section');sec.className='group';sec.dataset.g=g.id;
+  sec.innerHTML=`<div class="ghead"><span class="t">${g.title}</span><span class="acts"><button data-a="all">Tout</button><button data-a="none">Aucun</button></span></div><div class="chips"></div>`;
+  const box=sec.querySelector('.chips');
+  sec.querySelector('[data-a=all]').onclick=()=>ls.forEach(l=>setOn(l,true));
+  sec.querySelector('[data-a=none]').onclick=()=>ls.forEach(l=>setOn(l,false));
+  for(const l of ls){
+    const c=document.createElement('div');c.className='chip';c.dataset.q=(l.name+' '+l.badge+' '+(l.desc||'')+' '+g.title).toLowerCase();
+    c.innerHTML=`<span class="badge ${l.circle?'circle':''} ${l.tram?'tram':''}" style="background:${l.color};color:${l.fg||'#fff'}">${l.badge}</span>
+      <span class="txt"><div class="nm">${l.name}${l.isNew?'<span class="tag">NOUVELLE</span>':''}<span class="tag approx" hidden>APPROX.</span></div><div class="ds">${l.desc||''}</div></span>
+      <button class="zoom" title="Centrer sur la ligne">⌖</button>`;
+    c.onclick=e=>{if(e.target.closest('.zoom'))return;setOn(l,!state[l.id].on)};
+    c.querySelector('.zoom').onclick=()=>{if(!state[l.id].on)setOn(l,true);const b=state[l.id].bounds;collapseOnMobile();if(b){const d=innerWidth>720;map.fitBounds(b,{paddingTopLeft:[d?380:20,30],paddingBottomRight:[30,d?30:140],maxZoom:14})}};
+    box.appendChild(c);chips[l.id]=c;
+  }
+  list.appendChild(sec);
+}
+function refreshChip(l){const c=chips[l.id],s=state[l.id];c.classList.toggle('on',s.on);c.classList.toggle('nodata',!s.loaded);
+  c.querySelector('.approx').hidden=!s.approx}
+document.getElementById('q').oninput=e=>{const q=e.target.value.trim().toLowerCase();
+  for(const id in chips)chips[id].style.display=!q||chips[id].dataset.q.includes(q)?'':'none';
+  document.querySelectorAll('.group').forEach(g=>g.style.display=[...g.querySelectorAll('.chip')].some(c=>c.style.display!=='none')?'':'none')};
+const panel=document.getElementById('panel');
+document.getElementById('handle').onclick=()=>panel.classList.toggle('collapsed');
+function collapseOnMobile(){if(innerWidth<=720)panel.classList.add('collapsed')}
+
+/* ------------------------------------------------------------------ */
+/*  6. Données : fichier donnees_idf.js > cache navigateur > Overpass   */
+/* ------------------------------------------------------------------ */
+const ENDPOINTS=['https://overpass-api.de/api/interpreter','https://overpass.private.coffee/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
+const QUERIES={
+  ferre:`[out:json][timeout:300];
+(relation["type"="route"]["route"~"^(train|light_rail)$"]["network"~"RER|Transilien",i](48.10,1.40,49.40,3.60);
+ relation["type"="route"]["route"~"^(train|light_rail)$"]["name"~"^(RER|Transilien)",i](48.10,1.40,49.40,3.60);
+)->.r;.r out geom;node(r.r)[name];out body;`,
+  urbain:`[out:json][timeout:240];
+(relation["type"="route"]["route"="subway"](48.60,2.00,49.10,2.75);
+ relation["type"="route"]["route"~"^(tram|light_rail|train)$"]["ref"~"^T[0-9]+[ab]?$",i](48.50,1.90,49.10,2.80);
+)->.r;.r out geom;node(r.r)[name];out body;`
+};
+const LABELS={ferre:'RER & Transilien',urbain:'Métro, GPE, tram'};
+const DATA_V=2;
+function idb(){return new Promise((res,rej)=>{try{const r=indexedDB.open('idfmap',1);r.onupgradeneeded=()=>r.result.createObjectStore('c');
+  r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}catch(e){rej(e)}})}
+async function cacheGet(k){try{const db=await idb();return await new Promise(r=>{const q=db.transaction('c').objectStore('c').get(k);q.onsuccess=()=>r(q.result);q.onerror=()=>r(null)})}catch(e){return null}}
+async function cacheSet(k,v){try{const db=await idb();db.transaction('c','readwrite').objectStore('c').put(v,k)}catch(e){}}
+
+const statusEl=document.getElementById('status'),stxt=document.getElementById('stxt');
+function status(t,cls){stxt.textContent=t;statusEl.className=cls||''}
+
+async function overpass(q,label){
+  let lastErr;
+  for(const ep of ENDPOINTS){
+    try{
+      status(`${label} : téléchargement OSM (${new URL(ep).host})…`);
+      const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),320000);
+      const r=await fetch(ep,{method:'POST',body:'data='+encodeURIComponent(q),signal:ctl.signal,headers:{'Content-Type':'application/x-www-form-urlencoded'}});
+      clearTimeout(to);
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const j=await r.json();
+      if(!j.elements||!j.elements.length)throw new Error('réponse vide');
+      return j;
+    }catch(e){lastErr=e;console.warn('[carte] '+ep,e)}
+  }
+  throw lastErr;
+}
+
+// Classe une relation OSM -> clé interne (RER:A, TL:L, M:14, T:t3a)
+const METRO=new Set(Object.keys(MCOL).concat(['15','16','17','18']));
+function keyOf(t){
+  const route=t.route||'';let ref=(t.ref||'').trim();const net=((t.network||'')+' '+(t.name||'')+' '+(t.operator||''));
+  if(route==='subway'){
+    let r=ref.toLowerCase().replace(/\s+/g,'').replace(/^m/,'').replace(/^ligne/,'');
+    if(r==='3b')r='3bis';if(r==='7b')r='7bis';
+    if(!r){const m=(t.name||'').match(/(?:Ligne|Métro|Metro)\s*(\d+\s*(?:bis)?)/i);if(m)r=m[1].replace(/\s/g,'').toLowerCase()}
+    return METRO.has(r)?'M:'+r:null;
+  }
+  if(/^T\d+[ab]?$/i.test(ref)&&/^(tram|light_rail|train)$/.test(route))return 'T:'+ref.toLowerCase();
+  if(/^(train|light_rail)$/.test(route)){
+    if(!ref){const m=(t.name||'').match(/^(?:RER|Transilien)\s+(?:ligne\s+)?([A-Z])\b/i);if(m)ref=m[1]}
+    ref=ref.toUpperCase();
+    if(/RER/i.test(net)&&/^[A-E]$/.test(ref))return 'RER:'+ref;
+    if(/Transilien|SNCF|Île-de-France|Ile-de-France/i.test(net)&&/^[HJKLNPRUV]$/.test(ref))return 'TL:'+ref;
+  }
+  return null;
+}
+// Format compact stocké : {v,t,parts,rels:[{id,k,n,w:[ids],s:[[nom,lat,lon]]}],ways:{id:[lat,lon,lat,lon…]}}
+let DATA=null;const WAYLL=new Map();
+const r5=x=>Math.round(x*1e5)/1e5;
+function emptyData(){return {v:DATA_V,t:Date.now(),parts:{},rels:[],ways:{}}}
+function normalize(json,into){
+  const names=new Map(),seenR=new Set(into.rels.map(r=>r.id));
+  for(const e of json.elements)if(e.type==='node'&&e.tags&&e.tags.name)names.set(e.id,e.tags.name);
+  for(const e of json.elements){
+    if(e.type!=='relation'||!e.tags||seenR.has(e.id))continue;
+    const k=keyOf(e.tags);if(!k)continue;
+    const t=e.tags,r={id:e.id,k,n:[t.name,t.from,t.to,t.via,t.description].filter(Boolean).join(' | '),w:[],s:[]};
+    const ss=new Set();
+    for(const m of e.members||[]){
+      if(m.type==='way'&&m.geometry&&!/platform/.test(m.role||'')){
+        if(!into.ways[m.ref]){const f=[];for(const p of m.geometry)if(p){f.push(r5(p.lat),r5(p.lon))}into.ways[m.ref]=f}
+        r.w.push(m.ref);
+      }else if(m.type==='node'&&/^stop/.test(m.role||'')&&m.lat!=null){
+        const n=names.get(m.ref);if(n&&!ss.has(n)){ss.add(n);r.s.push([n,r5(m.lat),r5(m.lon)])}
+      }
+    }
+    into.rels.push(r);seenR.add(e.id);
+  }
+}
+// Géométrie d'une voie, orientée de façon canonique (même sens pour toutes les lignes qui la partagent)
+function wayLL(id){
+  let g=WAYLL.get(id);if(g)return g;
+  const f=DATA&&DATA.ways[id];if(!f||f.length<4)return null;
+  g=[];for(let i=0;i<f.length;i+=2)g.push([f[i],f[i+1]]);
+  const a=g[0],b=g[g.length-1],dx=(b[1]-a[1])*.66,dy=b[0]-a[0];
+  if((Math.abs(dx)>=Math.abs(dy)?dx:dy)<0)g.reverse();
+  WAYLL.set(id,g);return g;
+}
+// Sélection des relations d'une source : {k, only:/re/, not:/re/, west:lon}. Le texte testé = nom/from/to/via + gares desservies.
+function centroid(g){let a=0,b=0;for(const p of g){a+=p[0];b+=p[1]}return [a/g.length,b/g.length]}
+// boîte = [latMin, latMax, lonMin, lonMax]
+function inBoxes(p,boxes){return boxes.some(([a,b,c,d])=>p[0]>=a&&p[0]<=b&&p[1]>=c&&p[1]<=d)}
+function relText(r){return r.n+' | '+r.s.map(x=>x[0]).join(' | ')}
+// Vrai si la relation correspond au critère : regex sur nom/gares, ou une voie qui passe à moins de m mètres d'un point
+const NEARC=new Map();
+function relNear(r,lat,lon,m){
+  const key=r.id+':'+lat+':'+lon+':'+m;if(NEARC.has(key))return NEARC.get(key);
+  const dLat=m/111320,dLon=m/(111320*Math.cos(lat*Math.PI/180));let hit=false;
+  for(const id of r.w){const f=DATA.ways[id];if(!f)continue;
+    for(let i=0;i<f.length;i+=2){const a=(f[i]-lat)/dLat,b=(f[i+1]-lon)/dLon;if(a*a+b*b<=1){hit=true;break}}if(hit)break}
+  NEARC.set(key,hit);return hit;
+}
+function matches(r,c){
+  if(c instanceof RegExp)return c.test(relText(r));
+  if(c.re&&c.re.test(relText(r)))return true;
+  return !!(c.near&&c.near.some(([a,b,m])=>relNear(r,a,b,m)));
+}
+function collect(l){
+  const ways=new Set(),st=new Map();
+  for(const item of l.src){
+    const it=typeof item==='string'?{k:item}:item;
+    let rs=DATA.rels.filter(r=>r.k===it.k);
+    if(it.only){rs=rs.filter(r=>matches(r,it.only));if(!rs.length&&DATA.parts.ferre)console.warn('[carte] aucune relation',it.k,'ne correspond à',it.only)}
+    if(it.not){const f=rs.filter(r=>!matches(r,it.not));if(!f.length&&rs.length)console.warn('[carte] toutes les relations',it.k,'correspondent à',it.not,'— branche impossible à isoler');rs=f}
+    for(const r of rs){
+      for(const id of r.w){if(ways.has(id))continue;const g=wayLL(id);if(!g)continue;
+        if(it.west!=null&&!g.every(p=>p[1]<it.west))continue;if(it.east!=null&&!g.every(p=>p[1]>=it.east))continue;
+        if(it.drop&&inBoxes(centroid(g),it.drop))continue;ways.add(id)}
+      for(const x of r.s){if(it.west!=null&&!(x[2]<it.west))continue;if(it.east!=null&&!(x[2]>=it.east))continue;if(it.drop&&inBoxes([x[1],x[2]],it.drop))continue;if(!st.has(x[0]))st.set(x[0],x)}
+    }
+  }
+  return {ways:[...ways],stations:[...st.values()]};
+}
+function useData(d,src){DATA=d;WAYLL.clear();NEARC.clear();DATA_SRC=src;prepareAll()}
+let DATA_SRC='';
+function fmtDate(t){try{return new Date(t).toLocaleDateString('fr-FR')}catch(e){return ''}}
+function summary(){
+  const missing=L_.filter(l=>!state[l.id].loaded).map(l=>l.name);
+  const src={file:'fichier donnees_idf.js',cache:'cache du navigateur',net:'OpenStreetMap (à enregistrer)',import:'fichier importé'}[DATA_SRC]||'';
+  status(`Données : ${src} · ${fmtDate(DATA.t)}`+(missing.length?` · ${missing.length} ligne(s) sans données`:''),'ok');
+}
+async function loadData(force){
+  if(force)useData(emptyData(),'net');
+  else if(window.IDF_DATA&&window.IDF_DATA.v===DATA_V)useData(window.IDF_DATA,'file');
+  else{const c=await cacheGet('data-v2');useData(c&&c.v===DATA_V?c:emptyData(),c&&c.v===DATA_V?'cache':'net')}
+  let fetched=false,errors=0;
+  for(const k of ['ferre','urbain']){
+    if(DATA.parts[k])continue;
+    try{const j=await overpass(QUERIES[k],LABELS[k]);normalize(j,DATA);DATA.parts[k]=Date.now();fetched=true;WAYLL.clear();NEARC.clear();prepareAll()}
+    catch(e){errors++;console.error(e);status(`${LABELS[k]} : échec (${e.message}). Réessaie avec ↻.`,'err')}
+  }
+  if(fetched){DATA.t=Date.now();if(DATA_SRC!=='file')DATA_SRC='net';cacheSet('data-v2',DATA);document.getElementById('save').classList.add('pulse')}
+  if(!errors)summary();
+  console.info('[carte] relations :',DATA.rels.length,'· voies :',Object.keys(DATA.ways).length);
+}
+// Enregistrer / importer le fichier de données
+document.getElementById('save').onclick=()=>{
+  if(!DATA||!DATA.rels.length){status('Rien à enregistrer pour l’instant.','err');return}
+  const blob=new Blob(['window.IDF_DATA=',JSON.stringify(DATA),';\n'],{type:'text/javascript'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='donnees_idf.js';
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},3000);
+  document.getElementById('save').classList.remove('pulse');
+  status('donnees_idf.js enregistré : place-le dans le même dossier que la carte.','ok');
+};
+document.getElementById('open').onclick=()=>document.getElementById('file').click();
+document.getElementById('file').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{let t=await f.text();t=t.trim().replace(/^window\.IDF_DATA\s*=\s*/,'').replace(/;\s*$/,'');
+    const d=JSON.parse(t);if(d.v!==DATA_V)throw new Error('version '+d.v);
+    useData(d,'import');cacheSet('data-v2',d);summary();
+  }catch(err){status('Fichier illisible : '+err.message,'err')}
+  e.target.value='';
+};
+document.getElementById('reload').onclick=()=>loadData(true);
+
+/* ------------------------------------------------------------------ */
+/*  7. Démarrage                                                       */
+/* ------------------------------------------------------------------ */
+const savedBase=load('base');if(savedBase&&[...sel.options].some(o=>o.value===savedBase))sel.value=savedBase;
+setTheme(load('theme')==='light'?'light':'dark');
+let saved=null;try{saved=JSON.parse(load('sel2')||'null')}catch(e){}
+const initial=new Set(Array.isArray(saved)?saved:[...DEFAULT_ON]);
+prepareAll();
+for(const l of L_)if(initial.has(l.id))setOn(l,true);
+if(innerWidth<=720)panel.classList.add('collapsed');
+loadData(false);
+})();
+</script>
+</body>
+</html>
